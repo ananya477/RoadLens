@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Upload Image for Sign Detection</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Select Image</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".jpg,.jpeg,.png" required>
+                            <div class="form-text">Supported formats: JPG, JPEG, PNG</div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Upload and Detect</button>
+                            <a href="{{ url_for('select_input') }}" class="btn btn-secondary">Back to Input Selection</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

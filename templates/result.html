@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Detection Result</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h4>Detection Result:</h4>
+                        <p>{{ result }}</p>
+                    </div>
+                    <div class="text-center">
+                        <img src="{{ url_for('static', filename='uploads/' + image_path.split('/')[-1]) }}" 
+                             class="img-fluid rounded" alt="Uploaded Image" style="max-height: 400px;">
+                    </div>
+                    <div class="d-grid gap-2 mt-4">
+                        <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Another Image</a>
+                        <a href="{{ url_for('select_input') }}" class="btn btn-secondary">Back to Input Selection</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

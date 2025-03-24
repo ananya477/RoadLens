@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2 class="text-center mb-4">Vehicle Information</h2>
+    <form method="POST">
+        <div class="mb-3">
+            <label for="model" class="form-label">Vehicle Model</label>
+            <input type="text" class="form-control" id="model" name="model" required>
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">Vehicle Name</label>
+            <input type="text" class="form-control" id="name" name="name" required>
+        </div>
+        <div class="d-grid">
+            <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+    </form>
+</div>
+{% endblock %} 
