@@ -1,68 +1,79 @@
-from ultralytics import YOLO
-from PIL import Image
-import os
-import cv2
-import numpy as np
 import torch
-from ultralytics.nn.tasks import DetectionModel
-from ultralytics.nn.modules.conv import Conv, Concat
-from ultralytics.nn.modules.block import C2f, C3, SPPF, Bottleneck
-from ultralytics.nn.modules.head import Detect
-from torch.nn import (
-    Sequential, Conv2d, BatchNorm2d, SiLU, Module,
-    ModuleList, ReLU, Upsample, MaxPool2d
-)
-
-# Store the original torch.load function
-_original_torch_load = torch.load
-
-# Override torch.load to use weights_only=False
-def custom_torch_load(*args, **kwargs):
-    kwargs['weights_only'] = False
-    return _original_torch_load(*args, **kwargs)
-
-torch.load = custom_torch_load
-
-# Add required classes to safe globals for PyTorch 2.6
-safe_classes = [
-    DetectionModel, Sequential, Conv2d, BatchNorm2d,
-    SiLU, Module, ModuleList, ReLU, Upsample, MaxPool2d,
-    Conv, getattr, C2f, C3, SPPF, Bottleneck, Concat, Detect
-]
-torch.serialization.add_safe_globals(safe_classes)
+from ultralytics import YOLO
+import os
 
 class ModelHandler:
-    def __init__(self, model_path='best.pt'):
-        self.model = YOLO(model_path)
-        # Print model information
-        print("Model loaded successfully")
-        print(f"Model classes: {self.model.names}")
+    def __init__(self):
+        # Initialize YOLO model
+        self.model = YOLO('best.pt')
         
-        # Use the model's class names instead of hardcoded ones
-        self.class_names = list(self.model.names.values())
-        self.last_bbox = None
+        # Set device (GPU if available, else CPU)
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(self.device)
+        
+        # Enable model optimization
+        if hasattr(self.model, 'fuse'):
+            self.model.fuse()  # Fuse Conv2d + BatchNorm2d layers for faster inference
+        
+        # Set model to evaluation mode
+        self.model.eval()
+        
+        # Enable model optimization if available
+        if hasattr(self.model, 'optimize'):
+            self.model.optimize()
     
     def predict(self, image_path):
-        """Run prediction on an image"""
         try:
-            # Run prediction
-            results = self.model.predict(source=image_path, conf=0.25)
+            # Run inference with optimized settings
+            results = self.model.predict(
+                source=image_path,
+                conf=0.25,
+                iou=0.45,
+                verbose=False,
+                device=self.device,
+                half=True,
+                agnostic_nms=True,
+                max_det=50,
+                stream=True
+            )
             
-            # Process results
+            # Process the first result (since we're only processing one image)
             for r in results:
-                for box in r.boxes:
-                    class_id = int(box.cls)
-                    confidence = float(box.conf)
-                    class_name = self.model.names[class_id]
-                    
-                    # Format the result with separate confidence
-                    return f"Road sign detected: {class_name} (Confidence: {confidence:.2f})"
+                boxes = r.boxes
+                if len(boxes) == 0:
+                    return {
+                        'message': 'No objects detected',
+                        'bbox': [],
+                        'class_name': [],
+                        'confidence': []
+                    }
+                
+                # Get the first detection (highest confidence)
+                box = boxes[0]
+                bbox = box.xyxy[0].cpu().numpy().tolist()
+                conf = float(box.conf[0])
+                cls = int(box.cls[0])
+                class_name = self.model.names[cls]
+                
+                return {
+                    'message': f'Detected {class_name} with confidence {conf:.2f}',
+                    'bbox': bbox,
+                    'class_name': class_name,
+                    'confidence': conf
+                }
             
-            return "No road signs detected"
+            return {
+                'message': 'No results found',
+                'bbox': [],
+                'class_name': [],
+                'confidence': []
+            }
             
         except Exception as e:
-            print(f"Error during prediction: {e}")
-            return "Error during prediction"
-
-    def get_last_bbox(self):
-        return self.last_bbox 
+            print(f"Error in prediction: {str(e)}")
+            return {
+                'message': f'Error during prediction: {str(e)}',
+                'bbox': [],
+                'class_name': [],
+                'confidence': []
+            }

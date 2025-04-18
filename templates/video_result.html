@@ -24,12 +24,12 @@
                     <h5 class="card-title">Processed Video with Detections</h5>
                     <div class="video-container">
                         <video controls class="w-100" id="processedVideo">
-                            <source src="{{ url_for('static', filename='videos/' + video_path.split('/')[-1]) }}" type="video/x-msvideo">
+                            <source src="{{ url_for('static', filename='videos/' + processed_video) }}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                         <div id="videoError" class="alert alert-danger mt-2" style="display: none;">
                             <p>Error loading video. You can download the processed video to view it:</p>
-                            <a href="{{ url_for('static', filename='videos/' + video_path.split('/')[-1]) }}" class="btn btn-primary" download>
+                            <a href="{{ url_for('static', filename='videos/' + processed_video) }}" class="btn btn-primary" download>
                                 <i class="fas fa-download me-2"></i>Download Processed Video
                             </a>
                         </div>

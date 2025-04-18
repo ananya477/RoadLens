@@ -14,8 +14,7 @@
                         <p>{{ result }}</p>
                     </div>
                     <div class="text-center">
-                        <img src="{{ url_for('static', filename='uploads/' + image_path.split('/')[-1]) }}" 
-                             class="img-fluid rounded" alt="Uploaded Image" style="max-height: 400px;">
+                        <canvas id="imageCanvas" class="img-fluid rounded" style="max-height: 400px;"></canvas>
                     </div>
                     <div class="d-grid gap-2 mt-4">
                         <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Another Image</a>
@@ -26,4 +25,52 @@
         </div>
     </div>
 </div>
+
+<script>
+// Store template variables in JavaScript variables
+const detectionData = {
+    bbox: {{ bbox|tojson|safe if bbox else 'null' }},
+    class_name: {{ class_name|tojson|safe if class_name else 'null' }},
+    confidence: {{ confidence|tojson|safe if confidence else '0' }}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const canvas = document.getElementById('imageCanvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = function() {
+        try {
+            // Set canvas size to match image
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Draw the image
+            ctx.drawImage(img, 0, 0);
+            
+            // Draw bounding box if available
+            if (detectionData.bbox) {
+                const bbox = detectionData.bbox;
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]);
+                
+                // Draw label
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '16px Arial';
+                const label = `${detectionData.class_name} (${detectionData.confidence.toFixed(2)})`;
+                ctx.fillText(label, bbox[0], bbox[1] - 5);
+            }
+        } catch (error) {
+            console.error('Error drawing on canvas:', error);
+        }
+    };
+    
+    img.onerror = function() {
+        console.error('Error loading image');
+    };
+    
+    img.src = "{{ url_for('static', filename='uploads/' + image_path.split('/')[-1]) }}";
+});
+</script>
 {% endblock %} 

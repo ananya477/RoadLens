@@ -8,6 +8,8 @@ from werkzeug.utils import secure_filename
 from model_handler import ModelHandler
 import cv2
 import time
+import numpy as np
+import torch
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
@@ -129,8 +131,11 @@ def upload():
             
             # Pass the filename instead of the full path
             return render_template('result.html', 
-                                 result=result, 
-                                 image_path=filename)
+                                 result=result['message'],
+                                 image_path=filename,
+                                 bbox=result['bbox'],
+                                 class_name=result['class_name'],
+                                 confidence=result['confidence'])
     
     return render_template('upload.html')
 
@@ -160,6 +165,10 @@ def video_upload():
             frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # Calculate frame skip based on video length and FPS
+            frame_skip = max(1, min(total_frames // 800, fps // 10))  # Less aggressive frame skipping
             
             # Create output video writer with H.264 codec
             output_filename = f"processed_{filename}"
@@ -170,7 +179,8 @@ def video_upload():
             if not out.isOpened():
                 # Fallback to XVID if H.264 is not available
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                output_path = os.path.join(app.config['VIDEO_FOLDER'], f"processed_{os.path.splitext(filename)[0]}.avi")
+                output_filename = f"processed_{os.path.splitext(filename)[0]}.avi"
+                output_path = os.path.join(app.config['VIDEO_FOLDER'], output_filename)
                 out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
                 
                 if not out.isOpened():
@@ -178,59 +188,98 @@ def video_upload():
                     return redirect(request.url)
             
             detections = []
-            total_signs = 0
-            total_confidence = 0
+            batch_frames = []
+            batch_size = 8  # Reduced batch size
+            frame_count = 0  # Initialize frame counter
             
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
                 
-                # Run detection directly on the frame
-                results = model_handler.model.predict(source=frame, conf=0.25)
+                # Skip frames based on frame_skip
+                if frame_count % frame_skip != 0:
+                    frame_count += 1
+                    continue
                 
-                # Process detections
-                for r in results:
-                    for box in r.boxes:
-                        class_id = int(box.cls)
-                        confidence = float(box.conf)
-                        class_name = model_handler.model.names[class_id]
-                        
-                        # Extract bounding box coordinates
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        
-                        # Draw rectangle and label
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        label = f"{class_name} ({confidence:.2f})"
-                        cv2.putText(frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                        
-                        # Update statistics
-                        total_signs += 1
-                        total_confidence += confidence
-                        
-                        # Add to detections list
-                        detections.append({
-                            'time': f"{cap.get(cv2.CAP_PROP_POS_MSEC)/1000:.1f}s",
-                            'sign_type': class_name,
-                            'confidence': f"{confidence:.1f}"
-                        })
+                # Resize frame for processing
+                frame = cv2.resize(frame, (640, 640))
+                batch_frames.append(frame)
                 
-                # Write frame to output video
-                out.write(frame)
+                if len(batch_frames) == batch_size:
+                    # Process batch
+                    results = model_handler.model.predict(
+                        source=batch_frames,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False,
+                        device=model_handler.device,
+                        half=True,
+                        agnostic_nms=True,
+                        max_det=50,
+                        stream=True
+                    )
+                    
+                    # Process results and write frames
+                    for i, result in enumerate(results):
+                        frame = batch_frames[i]
+                        for box in result.boxes:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            conf = float(box.conf[0])
+                            cls = int(box.cls[0])
+                            label = f"{model_handler.model.names[cls]} {conf:.2f}"
+                            
+                            # Draw bounding box and label
+                            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                            cv2.putText(frame, label, (int(x1), int(y1) - 10),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        
+                        # Write processed frame
+                        out.write(frame)
+                    
+                    batch_frames = []
+                
+                frame_count += 1
+            
+            # Process remaining frames
+            if batch_frames:
+                results = model_handler.model.predict(
+                    source=batch_frames,
+                    conf=0.25,
+                    iou=0.45,
+                    verbose=False,
+                    device=model_handler.device,
+                    half=True,
+                    agnostic_nms=True,
+                    max_det=50,
+                    stream=True
+                )
+                
+                # Process results and write frames
+                for i, result in enumerate(results):
+                    frame = batch_frames[i]
+                    for box in result.boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        conf = float(box.conf[0])
+                        cls = int(box.cls[0])
+                        label = f"{model_handler.model.names[cls]} {conf:.2f}"
+                        
+                        # Draw bounding box and label
+                        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                        cv2.putText(frame, label, (int(x1), int(y1) - 10),
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    
+                    # Write processed frame
+                    out.write(frame)
             
             cap.release()
             out.release()
             processing_time = time.time() - start_time
-            avg_confidence = (total_confidence / total_signs) if total_signs > 0 else 0
             
-            # Pass both original and processed video paths
             return render_template('video_result.html',
-                                 video_path=output_path,
                                  original_video=filename,
-                                 total_signs=total_signs,
-                                 processing_time=f"{processing_time:.1f}",
-                                 avg_confidence=f"{avg_confidence:.1f}",
-                                 detections=detections)
+                                 processed_video=output_filename,
+                                 processing_time=f"{processing_time:.1f}")
     
     return render_template('video_upload.html')
 
@@ -243,4 +292,4 @@ def logout():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True) 
+    app.run(debug=True, port=5000) 
