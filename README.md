@@ -6,7 +6,7 @@ A web application that allows users to upload road sign images and detect them u
 
 - User authentication (signup/login)
 - Vehicle information storage
-- Road sign image upload
+- Road sign image/dashcam video upload
 - Road sign detection using AI model
 
 ## Setup Instructions
@@ -41,7 +41,7 @@ python app.py
 1. Sign up for a new account
 2. Enter your vehicle information
 3. Log in to your account
-4. Upload a road sign image
+4. Upload a road sign image/dashcam video
 5. View the detection results
 
 ## Note
